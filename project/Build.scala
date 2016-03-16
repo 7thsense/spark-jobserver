@@ -102,43 +102,38 @@ object JobServerBuild extends Build {
     // Make the docker task depend on the assembly task, which generates a fat JAR file
     docker <<= (docker dependsOn (assembly in jobServerExtras)),
     dockerfile in docker := {
-      val artifact = (outputPath in assembly in jobServerExtras).value
-      val artifactTargetPath = s"/app/${artifact.name}"
+      val artifact = (assemblyOutputPath in assembly in jobServerExtras).value
+      val appRoot = s"/app"
+      val artifactTargetPath = s"$appRoot/${artifact.name}"
       new sbtdocker.mutable.Dockerfile {
-        from("java:7-jre")
+        from("7thsense/java:8")
         // Dockerfile best practices: https://docs.docker.com/articles/dockerfile_best-practices/
         expose(8090)
         expose(9999)    // for JMX
         env("MESOS_VERSION", mesosVersion)
-        runRaw("""echo "deb http://repos.mesosphere.io/ubuntu/ trusty main" > /etc/apt/sources.list.d/mesosphere.list && \
-                  apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF && \
-                  apt-get -y update && \
-                  apt-get -y install mesos=${MESOS_VERSION} && \
-                  apt-get clean
+        runRaw("""rpm -Uvh http://repos.mesosphere.com/el/7/noarch/RPMS/mesosphere-el-repo-7-1.noarch.rpm && \
+                  yum -y install tar mesos marathon mesosphere-zookeeper && \
+                  yum clean all
                """)
         copy(artifact, artifactTargetPath)
-        copy(baseDirectory(_ / "bin" / "server_start.sh").value, file("app/server_start.sh"))
-        copy(baseDirectory(_ / "bin" / "server_stop.sh").value, file("app/server_stop.sh"))
-        copy(baseDirectory(_ / "config" / "log4j-stdout.properties").value, file("app/log4j-server.properties"))
-        copy(baseDirectory(_ / "config" / "docker.conf").value, file("app/docker.conf"))
-        copy(baseDirectory(_ / "config" / "docker.sh").value, file("app/settings.sh"))
+        copy(baseDirectory(_ / "bin" * "*.sh").value.get, s"$appRoot/")
+        copy(baseDirectory(_ / "config" / "log4j-stdout.properties").value, file(s"$appRoot/log4j-server.properties"))
+        copy(baseDirectory(_ / "config" / "docker.conf").value, file(s"$appRoot/docker.conf"))
+        copy(baseDirectory(_ / "config" / "docker.sh").value, file(s"$appRoot/settings.sh"))
         // Including envs in Dockerfile makes it easy to override from docker command
         env("JOBSERVER_MEMORY", "1G")
         env("SPARK_HOME", "/spark")
-        env("SPARK_BUILD", s"spark-${sparkVersion}-bin-hadoop2.4")
+        env("SPARK_BUILD", s"spark-${sparkVersion}-scala211-yarn-hadoop2.6")
         // Use a volume to persist database between container invocations
         run("mkdir", "-p", "/database")
-        runRaw("""wget http://d3kbcqa49mib13.cloudfront.net/$SPARK_BUILD.tgz && \
-                  tar -xvf $SPARK_BUILD.tgz && \
-                  mv $SPARK_BUILD /spark && \
-                  rm $SPARK_BUILD.tgz
-               """)
+        copy(baseDirectory(_ / "target" / "spark").value.get, "/spark")
         volume("/database")
-        entryPoint("app/server_start.sh")
+        workDir(appRoot)
+        entryPoint(s"$appRoot/server_start.sh")
       }
     },
     imageNames in docker := Seq(
-      sbtdocker.ImageName(namespace = Some("velvia"),
+      sbtdocker.ImageName(namespace = Some("7thsense"),
                           repository = "spark-jobserver",
                           tag = Some(s"${version.value}.mesos-${mesosVersion.split('-')(0)}.spark-${sparkVersion}"))
     )
@@ -178,8 +173,8 @@ object JobServerBuild extends Build {
   lazy val commonSettings = Defaults.defaultSettings ++ dirSettings ++ implicitlySettings ++ Seq(
     organization := "spark.jobserver",
     crossPaths   := true,
-    crossScalaVersions := Seq("2.10.5","2.11.6"),
-    scalaVersion := "2.10.5",
+    crossScalaVersions := Seq("2.10.5","2.11.7"),
+    scalaVersion := "2.11.7",
     publishTo    := Some(Resolver.file("Unused repo", file("target/unusedrepo"))),
 
     // scalastyleFailOnError := true,

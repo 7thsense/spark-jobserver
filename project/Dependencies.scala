@@ -32,7 +32,7 @@ object Dependencies {
 
   val mesosVersion = sys.env.getOrElse("MESOS_VERSION", "0.25.0-0.2.70.ubuntu1404")
 
-  val sparkVersion = sys.env.getOrElse("SPARK_VERSION", "1.6.0")
+  val sparkVersion = sys.env.getOrElse("SPARK_VERSION", "1.6.2-SNAPSHOT")
   lazy val sparkDeps = Seq(
     "org.apache.spark" %% "spark-core" % sparkVersion % "provided" excludeAll(excludeNettyIo, excludeQQ),
     // Force netty version.  This avoids some Spark netty dependency problem.
@@ -71,6 +71,7 @@ object Dependencies {
   lazy val apiDeps = sparkDeps :+ typeSafeConfigDeps
 
   val repos = Seq(
+    Resolver.mavenLocal,
     "Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/",
     "sonatype snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/",
     "spray repo" at "http://repo.spray.io"
